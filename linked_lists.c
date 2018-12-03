@@ -39,7 +39,7 @@ void add_element(struct linked_list *list, uint32_t key)
 {
     struct linked_list *link = get_previous_link(list, key);
     if (link) return; // key already in list
-    
+
     // build link and put it at the front of the list
     link = (struct linked_list*)malloc(sizeof(struct linked_list));
     link->key = key;
@@ -51,7 +51,7 @@ void delete_element(struct linked_list *list, uint32_t key)
 {
     struct linked_list *link = get_previous_link(list, key);
     if (!link) return; // key isn't in the list
-    
+
     // we need to get rid of link->next
     struct linked_list *to_delete = link->next;
     link->next = to_delete->next;

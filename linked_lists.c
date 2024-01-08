@@ -1,64 +1,61 @@
 
 #include "linked_lists.h"
 
-/* We represent linked lists using a sentinel link at the beginning of the list.
-   This makes it easier to insert and remove elements without having to return
-   updated lists.
- */
+#include <assert.h>
+#include <stdio.h>
 
-struct linked_list *new_linked_list()
-{
-    struct linked_list *sentinel = (struct linked_list*)malloc(sizeof(struct linked_list));
-    sentinel->key = 0;
-    sentinel->next = 0;
-    return sentinel;
+void init_linked_list(LIST list) {
+  assert(list);
+  *list = NULL;
 }
 
-void delete_linked_list(struct linked_list *list)
-{
-    // because of sentinel list != 0
-    do {
-        struct linked_list *next = list->next;
-        free(list);
-        list = next;
-    } while (list != 0);
+struct link *new_link(unsigned int key, struct link *next) {
+  struct link *link = malloc(sizeof *link);
+  *link = (struct link){.key = key, .next = next};
+  return link;
 }
 
-static struct linked_list *
-get_previous_link(struct linked_list *list, uint32_t key)
-{
-    // because of sentinel list != 0
-    while (list->next) {
-        if (list->next->key == key) return list;
-        list = list->next;
-    }
-    return 0; // if we get to list->next == 0, we didn't find the key
+void delete_linked_list(LIST list) {
+  while (*list) {
+    struct link *next = (*list)->next;
+    free(*list);
+    *list = next;
+  }
 }
 
-void add_element(struct linked_list *list, uint32_t key)
-{
-    struct linked_list *link = get_previous_link(list, key);
-    if (link) return; // key already in list
-
-    // build link and put it at the front of the list
-    link = (struct linked_list*)malloc(sizeof(struct linked_list));
-    link->key = key;
-    link->next = list->next;
-    list->next = link;
+void add_element(LIST list, unsigned int key) {
+  // Build link and put it at the front of the list.
+  // The hash table checks for duplicates if we want to
+  // avoid those
+  *list = new_link(key, *list);
 }
 
-void delete_element(struct linked_list *list, uint32_t key)
-{
-    struct linked_list *link = get_previous_link(list, key);
-    if (!link) return; // key isn't in the list
-
-    // we need to get rid of link->next
-    struct linked_list *to_delete = link->next;
-    link->next = to_delete->next;
-    free(to_delete);
+// Get the reference of (pointer to) the pointer to the link that
+// contains the key. That is, get a pointer to the 'next' pointer
+// in the previous link (if there is one) or a pointer to the head
+// of the list. From that pointer, we can access both the link
+// that holds the key, and also update the pointer to the link that
+// holds the link to delete the link.
+struct link **ref_to_link(LIST list, unsigned int key) {
+  for (struct link **ref = list; *ref; ref = &(*ref)->next) {
+    if ((*ref)->key == key) return ref;
+  }
+  return NULL;
 }
 
-bool contains_element(struct linked_list *list, uint32_t key)
-{
-    return get_previous_link(list, key) != 0;
+void delete_element(LIST list, unsigned int key) {
+  struct link **prev_ref = ref_to_link(list, key);
+  if (prev_ref) {
+    // Cut out *prev_ref as this is the link that contains
+    // key. First, save its next, then we can free it, and
+    // finally update the list by updating the pointer
+    // that previously pointed to the now deleted link.
+    struct link *next = (*prev_ref)->next;
+    free(*prev_ref);
+    *prev_ref = next;
+  }
+}
+
+bool contains_element(LIST list, unsigned int key) {
+  return ref_to_link(list, key) != 0;
 }

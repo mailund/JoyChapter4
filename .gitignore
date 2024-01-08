@@ -1,8 +1,7 @@
-array_test
+Makefile.bak
 chained_hash_test
-dynamic_chained_hash_test
+linked_lists_test
 open_addressing_test
-open_addressing_prime_test
 
 # Prerequisites
 *.d
@@ -56,3 +55,16 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+
+CMakeCache.txt
+CMakeFiles
+CTestTestfile.cmake
+DartConfiguration.tcl
+Testing
+checks.json
+cmake_install.cmake
+Makefile
+CMakeScripts/
+JoyChapter3.xcodeproj/
+build/

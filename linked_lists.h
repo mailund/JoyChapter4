@@ -2,19 +2,21 @@
 #ifndef LINKED_LISTS_H
 #define LINKED_LISTS_H
 
-#include <stdlib.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
-struct linked_list {
-    uint32_t key;
-    struct linked_list *next;
+struct link {
+  uint32_t key;
+  struct link *next;
 };
+typedef struct link *LIST_HEAD;
+typedef LIST_HEAD *LIST;
 
-struct linked_list *new_linked_list();
-void delete_linked_list(struct linked_list *list);
+void init_linked_list(LIST list);
+void delete_linked_list(LIST list);
 
-void add_element(struct linked_list *list, uint32_t key);
-void delete_element(struct linked_list *list, uint32_t key);
-bool contains_element(struct linked_list *list, uint32_t key);
+void add_element(LIST list, unsigned int key);
+void delete_element(LIST list, unsigned int key);
+bool contains_element(LIST list, unsigned int key);
 
 #endif

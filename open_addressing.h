@@ -30,4 +30,7 @@ void insert_key(struct hash_table *table, unsigned int key);
 bool contains_key(struct hash_table *table, unsigned int key);
 void delete_key(struct hash_table *table, unsigned int key);
 
+// For debugging
+void print_table(struct hash_table *table);
+
 #endif

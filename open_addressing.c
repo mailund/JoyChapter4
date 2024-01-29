@@ -17,7 +17,6 @@ static void resize(struct hash_table *table, unsigned int new_size) {
 
   // Update table so it now contains the new bins (that are empty)
   table->bins = malloc(new_size * sizeof *table->bins);
-  struct bin *end = table->bins + new_size;
   struct bin empty_bin = {.in_probe = false, .is_empty = true};
   for (unsigned int i = 0; i < new_size; i++) {
     table->bins[i] = empty_bin;
@@ -27,8 +26,7 @@ static void resize(struct hash_table *table, unsigned int new_size) {
 
   // the move the values from the old bins to the new, using the table's
   // insertion function
-  end = old_bins + old_size;
-  for (struct bin *bin = old_bins; bin != end; ++bin) {
+  for (struct bin *bin = old_bins; bin != old_bins + old_size; bin++) {
     if (bin->in_probe || !bin->is_empty) {
       insert_key(table, bin->key);
     }
@@ -94,8 +92,8 @@ void insert_key(struct hash_table *table, unsigned int key) {
 }
 
 bool contains_key(struct hash_table *table, unsigned int key) {
-  // If we find a bin that is in a probe, it is because it contains key.
-  return find_key(table, key)->in_probe;
+  struct bin *bin = find_key(table, key);
+  return bin->key == key && !bin->is_empty;
 }
 
 void delete_key(struct hash_table *table, unsigned int key) {
@@ -106,4 +104,22 @@ void delete_key(struct hash_table *table, unsigned int key) {
   bin->is_empty = true;         // Delete the bin
   if (table->active < table->load_limit / 4 * table->size)
     resize(table, table->size / 2);
+}
+
+void print_table(struct hash_table *table)
+{
+    for (unsigned int i = 0; i < table->size; i++) {
+        if (i > 0 && i % 8 == 0) {
+            printf("\n");
+        }
+        struct bin *bin = table->bins + i;
+        if (bin->in_probe && !bin->is_empty) {
+            printf("[%u]", bin->key);
+        } else if (bin->in_probe && bin->is_empty) {
+            printf("[*]");
+        } else {
+            printf("[ ]");
+        }
+    }
+    printf("\n----------------------\n");
 }

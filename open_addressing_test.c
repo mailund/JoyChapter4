@@ -29,18 +29,26 @@ int main(int argc, const char *argv[]) {
   struct hash_table *table = new_table(2, load_limit);
   clock_t start = clock();
   for (int i = 0; i < no_elms; ++i) {
+      printf("Inserting key %u\n", keys[i]);
     insert_key(table, keys[i]);
+      print_table(table);
   }
   for (int i = 0; i < no_elms; ++i) {
+      printf("Checking that table has key %u\n", keys[i]);
+      print_table(table);
     assert(contains_key(table, keys[i]));
   }
   for (int i = 0; i < no_elms; ++i) {
     (void)contains_key(table, random_key());
   }
   for (int i = 0; i < no_elms; ++i) {
+      printf("Deleting key %u\n", keys[i]);
     delete_key(table, keys[i]);
+      print_table(table);
   }
   for (int i = 0; i < no_elms; ++i) {
+      printf("Checking that key %u is no longer there\n", keys[i]);
+      print_table(table);
     assert(!contains_key(table, keys[i]));
   }
   clock_t end = clock();

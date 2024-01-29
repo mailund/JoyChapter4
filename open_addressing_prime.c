@@ -106,8 +106,8 @@ void insert_key(struct hash_table *table, unsigned int key) {
 }
 
 bool contains_key(struct hash_table *table, unsigned int key) {
-  // If we find a bin that is in a probe, it is because it contains key.
-  return find_key(table, key)->in_probe;
+    struct bin *bin = find_key(table, key);
+    return bin->key == key && !bin->is_empty;
 }
 
 void delete_key(struct hash_table *table, unsigned int key) {
@@ -123,4 +123,23 @@ void delete_key(struct hash_table *table, unsigned int key) {
       table->primes_idx > 0) {
     resize(table, primes[--(table->primes_idx)]);
   }
+}
+
+
+void print_table(struct hash_table *table)
+{
+    for (unsigned int i = 0; i < table->size; i++) {
+        if (i > 0 && i % 8 == 0) {
+            printf("\n");
+        }
+        struct bin *bin = table->bins + i;
+        if (bin->in_probe && !bin->is_empty) {
+            printf("[%u]", bin->key);
+        } else if (bin->in_probe && bin->is_empty) {
+            printf("[*]");
+        } else {
+            printf("[ ]");
+        }
+    }
+    printf("\n----------------------\n");
 }

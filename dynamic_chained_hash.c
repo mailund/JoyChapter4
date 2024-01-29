@@ -119,27 +119,10 @@ static void grow_tables(struct hash_table *table) {
   }
 }
 
-static void split(struct hash_table *table) {
-  struct index from_idx = split_key(table->split);
-  struct index to_idx = split_key(table->split + table->m);
+void split_bin(LIST from_bin, LIST to_bin, unsigned int split_bit) {
+  struct link *link = *from_bin;  // Catch list before we clear the bin.
+  init_linked_list(from_bin);     // Make bin ready for new values
 
-  if (to_idx.bin == 0 && merge_key(to_idx) == table->max_init + 1) {
-    table->tables[to_idx.table] =
-        malloc(SIZE(SUBTABLE_BITS) * sizeof *table->tables[to_idx.table]);
-  }
-
-  LIST from_bin = get_index_bin(table, from_idx);
-  LIST to_bin = get_index_bin(table, to_idx);
-
-  // Catch the front link of the from_bin list and reset the two lists to make
-  // them ready for the split.
-  struct link *link = *from_bin;
-  init_linked_list(from_bin);
-  init_linked_list(to_bin);
-
-  // Now split the from_bin into two based on the left-most bit in the full key
-  // width
-  unsigned int split_bit = 1 << (table->table_bits + SUBTABLE_BITS);
   while (link) {
     struct link *next = link->next;
     if (link->key & split_bit) {
@@ -147,12 +130,29 @@ static void split(struct hash_table *table) {
       link->next = *to_bin;
       *to_bin = link;
     } else {
-      // Put link back in its current bin
+      // Put link back into its current bin
       link->next = *from_bin;
       *from_bin = link;
     }
     link = next;
   }
+}
+
+static void split(struct hash_table *table) {
+  // Initialise the target bin at split + m.
+  struct index to_idx = split_key(table->split + table->m);
+  if (to_idx.bin == 0 && table->split + table->m == table->max_init + 1) {
+    // If we are moving into a new sub-table, we need to allocate it
+    table->tables[to_idx.table] =
+        malloc(SIZE(SUBTABLE_BITS) * sizeof *table->tables[to_idx.table]);
+  }
+  LIST to_bin = get_index_bin(table, to_idx);
+  init_linked_list(to_bin);
+
+  // Get the split bin and if there are elements there, split them.
+  LIST from_bin = get_key_bin(table, table->split);
+  unsigned int split_bit = 1 << (table->table_bits + SUBTABLE_BITS);
+  split_bin(from_bin, to_bin, split_bit);
 
   // Update counters to reflect that we have split
   table->split++;
@@ -164,21 +164,62 @@ static void grow(struct hash_table *table) {
   split(table);
 }
 
-static void shrink(struct hash_table *table) {
-#warning Not implemented yet
-}
-
 void insert_key(struct hash_table *table, unsigned int key) {
-  grow(table);
   LIST bin = get_key_bin(table, key);
   if (!contains_element(bin, key)) {
     add_element(bin, key);
+    grow(table);
   }
 }
 
 bool contains_key(struct hash_table *table, unsigned int key) {
-  LIST bin = get_key_bin(table, key);
-  return contains_element(bin, key);
+  return contains_element(get_key_bin(table, key), key);
+}
+
+static void merge_bins(LIST from_bin, LIST to_bin) {
+  struct link *link = *from_bin;
+  while (link) {
+    struct link *next = link->next;
+    link->next = *to_bin;
+    *to_bin = link;
+    link = next;
+  }
+}
+
+static void shring_tables(struct hash_table *table) {
+  // If we have reduced the size from 8m to 2m, reduce the table size to 4m.
+  if (table->max_init > 8 * table->m) {
+    unsigned int from_index = (4 * table->m) >> SUBTABLE_BITS;
+    unsigned int tables_allocated = table->max_init >> SUBTABLE_BITS;
+    // Free the sub-tables that are now lost.
+    for (unsigned int i = from_index; i < tables_allocated; i++) {
+      free(table->tables[i]);
+    }
+    // Reduce the size of tables.
+    size_t new_size = from_index * sizeof *table->tables;
+    table->tables = realloc(table->tables, new_size);
+    // And now the max initialised is 4m.
+    table->max_init = 4 * table->m;
+  }
+}
+
+static void shrink(struct hash_table *table) {
+  // Count down
+  if (table->split > 0) {
+    table->split--;
+  } else {
+    table->table_bits--;
+    table->m /= 2;
+    table->split = table->m - 1;
+  }
+
+  // Merge largest bin into split bin (well, one before the split bin so the
+  // indices match)
+  LIST from_bin = get_index_bin(table, split_key(table->split + table->m));
+  LIST to_bin = get_index_bin(table, split_key(table->split));
+  merge_bins(from_bin, to_bin);
+
+  shring_tables(table);
 }
 
 void delete_key(struct hash_table *table, unsigned int key) {
@@ -190,7 +231,8 @@ void delete_key(struct hash_table *table, unsigned int key) {
 }
 
 void print_table(struct hash_table *table) {
-  for (unsigned int slot = 0; slot <= table->max_init; slot++) {
+  unsigned int slot;
+  for (slot = 0; slot < table->split + table->m; slot++) {
     if ((slot & MASK(SUBTABLE_BITS)) == 0) printf("\n");
     LIST bin = get_key_bin(table, slot);
     char *sep = "";
@@ -204,4 +246,5 @@ void print_table(struct hash_table *table) {
     printf("]");
   }
   printf("\n");
+  printf("Capacity is %u\n", table->split + table->m);
 }

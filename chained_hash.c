@@ -33,46 +33,15 @@ void delete_table(struct hash_table *table) {
   free(table);
 }
 
-#if 0
-// Using insert and delete to move keys
-static void resize(struct hash_table *table, unsigned int new_size) {
-  // Remember these...
-  unsigned int old_size = table->size;
-  LIST_HEAD *old_bins = table->bins;
-
-  // set up the new table
-  table->bins = malloc(new_size * sizeof *table->bins);
-  for (size_t i = 0; i < new_size; ++i) {
-    init_linked_list(get_bin(table, i));
-  }
-  table->size = new_size;
-  table->used = 0;  // set to zero as we increment when inserting
-
-  // Copy keys
-  for (LIST old_bin = old_bins; old_bin < old_bins + old_size; old_bin++) {
-    for (struct link *link = *old_bin; link; link = link->next) {
-      insert_key(table, link->key);
-    }
-  }
-
-  // Delete old table
-  for (LIST old_bin = old_bins; old_bin < old_bins + old_size; old_bin++) {
-    delete_linked_list(old_bin);
-  }
-  free(old_bins);
-}
-
-#else
-
 // This version copies links.
-static void resize(struct hash_table *table, size_t new_size) {
+static void resize(struct hash_table *table, unsigned int new_size) {
   // remember these...
   unsigned int old_size = table->size;
   LIST_HEAD *old_bins = table->bins;
 
   // set up the new table
   table->bins = malloc(new_size * sizeof *table->bins);
-  for (size_t i = 0; i < new_size; ++i) {
+  for (unsigned int i = 0; i < new_size; ++i) {
     init_linked_list(get_key_bin(table, i));
   }
   table->size = new_size;
@@ -94,7 +63,6 @@ static void resize(struct hash_table *table, size_t new_size) {
 
   free(old_bins);
 }
-#endif
 
 void insert_key(struct hash_table *table, unsigned int key) {
   LIST bin = get_key_bin(table, key);

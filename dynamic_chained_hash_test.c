@@ -55,16 +55,16 @@ int main(int argc, const char *argv[]) {
   printf("----duplications---\n");
   for (int i = 0; i < no_elms; ++i) {
     assert(contains_key(table, i));
-    // insert_key(table, (1 << 2) | i);
+    assert(contains_key(table, keys[i]));
     insert_key(table, i);
     insert_key(table, keys[i]);
-    assert(contains_key(table, keys[i]));
   }
   print_table(table);
 
   printf("----deleting---\n");
   for (int i = 0; i < no_elms; ++i) {
     printf("Checking that we have key %u\n", keys[i]);
+      print_table(table);
     assert(contains_key(table, keys[i]));
     delete_key(table, keys[i]);
     assert(!contains_key(table, keys[i]));

@@ -31,26 +31,26 @@ add_executable(chained_hash_test chained_hash_test.c)
 target_link_libraries(chained_hash_test chained_hash)
 add_test(
     NAME chained_hash_test 
-    COMMAND chained_hash_test 10
+    COMMAND chained_hash_test 100
 )
 
 add_executable(open_addressing_test open_addressing_test.c)
 target_link_libraries(open_addressing_test open_addressing)
 add_test(
     NAME open_addressing_test 
-    COMMAND open_addressing_test 10
+    COMMAND open_addressing_test 100
 )
 
 add_executable(open_addressing_prime_test open_addressing_test.c)
 target_link_libraries(open_addressing_prime_test open_addressing_prime)
 add_test(
     NAME open_addressing_prime_test 
-    COMMAND open_addressing_prime_test 10
+    COMMAND open_addressing_prime_test 100
 )
 
 add_executable(dynamic_chained_test dynamic_chained_hash_test.c)
 target_link_libraries(dynamic_chained_test dynamic_chained_hash)
 add_test(
     NAME dynamic_chained_test 
-    COMMAND dynamic_chained_test 10
+    COMMAND dynamic_chained_test 100
 )

@@ -1,265 +1,207 @@
 
 #include "dynamic_chained_hash.h"
-#include "linked_lists.h"
-#include <stdlib.h>
+
+#include <assert.h>
+#include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 
+#include "linked_lists.h"
 
-static inline uint32_t
-tables_idx(uint32_t x, uint32_t mask, uint32_t bits)
-{ return (x & mask) >> bits; }
-static inline uint32_t
-sub_idx(uint32_t x, uint32_t mask)
-{ return x & mask; }
-static inline uint32_t
-mask_bits(uint32_t no_bits)
-{ return (1 << no_bits) - 1; }
+#define MAX(A, B) ((A < B) ? (B) : (A))
 
-static inline void
-set_table_masks(struct hash_table *table)
-{
-    uint32_t old_bits = table->table_bits + table->k;
-    uint32_t new_bits = old_bits + 1;
-    table->old_tables_mask  = mask_bits(old_bits);
-    table->new_tables_mask  = mask_bits(new_bits);
+#define SIZE(BITS) (1 << (BITS))     // Size of a table indexed with BITS bits
+#define MASK(BITS) (SIZE(BITS) - 1)  // Mask for a table index with BITS bits
+#define SUBTABLE_BITS 3              // 8 bins to a sub-table
+
+struct hash_table {
+  LIST_HEAD **tables;  // tables is an array of pointers to sub-tables
+
+  unsigned int m;           // Number of bins in the buttom half of the table
+  unsigned int max_init;    // Max index of initialised bins.
+  unsigned int table_bits;  // bits used for indexing into sub-tables
+  unsigned int split;       // pointer to the bin we need to split/merge
+};
+
+// Indexing
+struct idx {
+  unsigned int table;
+  unsigned int bin;
+};
+
+// With compiler optimisation, this struct is likely to have the same size as an
+// unsigned int and splitting the bits into indices is simply a cast. Checked
+// with gcc, zig, icx, clang but it does not seem to happen with icc and msvc.
+// We still need to split the index, though, so there is no way around it.
+// Adding the masking complicates it slightly, but is necessary after all.
+struct index {
+  unsigned int bin : SUBTABLE_BITS;
+  unsigned int table : sizeof(unsigned int) * CHAR_BIT - SUBTABLE_BITS;
+};
+
+struct index split_key(unsigned int hash_key) {
+  return (struct index){.bin = hash_key & MASK(SUBTABLE_BITS),
+                        .table = (hash_key >> SUBTABLE_BITS)};
 }
-static inline uint32_t
-tables_idx_from_table(struct hash_table *table, uint32_t x)
-{
-    uint32_t old_masked_key = x & table->old_tables_mask;
-    uint32_t tmask = (table->split_count <= old_masked_key) ?
-                        table->old_tables_mask :
-                        table->new_tables_mask;
-    return tables_idx(x, tmask, table->table_bits);
-}
-
-struct hash_table *empty_table(size_t table_bits)
-{
-    struct hash_table *table = malloc(sizeof(struct hash_table));
-    table->table_bits = table_bits;
-    table->subtable_mask = (1 << table_bits) - 1;
-    table->k = 0;
-    set_table_masks(table);
-    table->split_count = 0;
-
-    uint32_t size = 1 << table_bits;
-    uint32_t no_tables = 1 << (table->k + 1);
-
-    table->tables = malloc(no_tables * sizeof(subtable));
-    for (uint32_t i = 0; i < no_tables; ++i) {
-        table->tables[i] = malloc(size * sizeof(struct linked_list));
-    }
-    // initialise the first table
-    for (uint32_t j = 0; j < size; ++j) {
-        table->tables[0][j].next = 0;
-    }
-    table->allocated_tables = 2;
-    table->max_bin_initialised = size;
-
-    return table;
+unsigned int merge_key(struct index idx) {
+  return idx.table << SUBTABLE_BITS | idx.bin;
 }
 
-void new_delete_linked_list(struct linked_list *list)
-{
-    while (list) {
-        struct linked_list *next = list->next;
-        free(list);
-        list = next;
-    }
+// The bins up to split + m are valid, the higher indices are not.
+// If we are below this index, we can use the index, otherwise we need
+// to use one table bit less.
+struct index valid_index(struct hash_table *table, unsigned int hash_key) {
+  unsigned int masked_key =
+      hash_key & MASK(table->table_bits + 1 + SUBTABLE_BITS);
+  if (masked_key >= table->split + table->m) {
+    masked_key &= MASK(table->table_bits + SUBTABLE_BITS);
+  }
+  return split_key(masked_key);
 }
 
-
-void delete_table(struct hash_table *table)
-{
-    uint32_t t_idx = 0;
-    uint32_t s_idx = 0;
-    uint32_t size = 1 << table->table_bits;
-    for (uint32_t i = 0; i < table->max_bin_initialised; ++i) {
-        subtable subtab = table->tables[t_idx];
-        for (u_int32_t j = 0; j < size; ++j) {
-            new_delete_linked_list(subtab[s_idx].next);
-        }
-        s_idx++;
-        if (s_idx == size) {
-            free(subtab);
-            t_idx++;
-            s_idx = 0;
-        }
-    }
-
-    free(table->tables);
-    free(table);
+LIST get_index_bin(struct hash_table *table, struct index idx) {
+  return &table->tables[idx.table][idx.bin];
+}
+LIST get_key_bin(struct hash_table *table, unsigned int hash_key) {
+  return get_index_bin(table, valid_index(table, hash_key));
 }
 
-static void grow_tables(struct hash_table *table)
-{
-    table->split_count = 0;
-    table->k++;
-    set_table_masks(table);
+struct hash_table *new_table() {
+  struct hash_table *table = malloc(sizeof *table);
+  // Allocate the table of tables and the first two tables.
+  table->tables = malloc(2 * sizeof *table->tables);
 
-    uint32_t old_no_tables = 1 << table->k;
-    uint32_t new_no_tables = 1 << (table->k + 1);
-    uint32_t size = 1 << table->table_bits;
+  // Initialise the first table only
+  table->tables[0] = malloc(SIZE(SUBTABLE_BITS) * sizeof *table->tables[0]);
+  for (unsigned int i = 0; i < SIZE(SUBTABLE_BITS); i++) {
+    init_linked_list(&table->tables[0][i]);
+  }
 
-    subtable *old_tables = table->tables;
-    subtable *new_tables = malloc(new_no_tables * sizeof(subtable));
-    for (uint32_t i = 0; i < old_no_tables; ++i) {
-        new_tables[i] = old_tables[i];
-    }
-    for (uint32_t i = old_no_tables; i < new_no_tables; ++i) {
-        new_tables[i] = malloc(size * sizeof(struct linked_list));
-    }
-    table->allocated_tables *= 2;
+  table->m = SIZE(SUBTABLE_BITS);  // We have one full sub-table to begin with
+  table->max_init = table->m - 1;  // Max index of initialised bins
+  table->table_bits = 0;           // we only use bin bits initially
+  table->split = 0;                // we start splitting at the first bin
 
-    table->tables = new_tables;
-    free(old_tables);
+  return table;
 }
 
-static inline void split_bin(struct hash_table *table)
-{
-    uint32_t old_t_idx = tables_idx(
-        table->split_count,
-        table->old_tables_mask,
-        table->table_bits
-    );
-    uint32_t new_t_idx = (1 << table->k) + old_t_idx;
-    uint32_t s_idx = sub_idx(table->split_count, table->subtable_mask);
+void delete_table(struct hash_table *table) {
+  // Delete lists in all initialised bins
+  for (unsigned int bin = 0; bin < table->max_init; bin++) {
+    delete_linked_list(get_key_bin(table, bin));
+  }
 
-    struct linked_list *old_bin =
-        &table->tables[old_t_idx][s_idx];
-    struct linked_list *new_bin =
-        &table->tables[new_t_idx][s_idx];
-    new_bin->next = 0;
-    table->max_bin_initialised++;
+  // Then free all sub-tables
+  unsigned int tables_allocated = table->max_init >> SUBTABLE_BITS;
+  for (unsigned int i = 0; i < tables_allocated; i++) {
+    free(table->tables[i]);
+  }
 
-    uint32_t ti_mask = 1 << (table->k + table->table_bits);
-
-    struct linked_list *list = old_bin->next; // save link to old
-    old_bin->next = 0; // reset old bin
-
-    while (list != 0) {
-        struct linked_list *next = list->next;
-        if (list->key & ti_mask) {
-            list->next = new_bin->next;
-            new_bin->next = list;
-        } else {
-            list->next = old_bin->next;
-            old_bin->next = list;
-        }
-        list = next;
-    }
-
-    table->split_count++;
-    // The old mask is also the maximum index into old tables
-    if (table->split_count > table->old_tables_mask) {
-        grow_tables(table);
-    }
+  // And finally free the tables array and the table
+  free(table->tables);
+  free(table);
 }
 
-void insert_key(struct hash_table *table, uint32_t key)
-{
-    uint32_t t_idx = tables_idx_from_table(table, key);
-    uint32_t s_idx = sub_idx(key, table->subtable_mask);
+static void grow_tables(struct hash_table *table) {
+  // Grow table if we have inserted m elements.
+  if (table->split == table->m) {
+    // Use one more bit for table indices
+    table->table_bits++;
+    table->m *= 2;
 
-    subtable subtab = table->tables[t_idx];
-    if (!contains_element(&subtab[s_idx], key)) {
-        add_element(&subtab[s_idx], key);
-            split_bin(table);
-    }
+    // Alloc more table pointers (but don't initialise, we do that
+    // incrementally)
+    size_t new_size = 2 * SIZE(table->table_bits) * sizeof *table->tables;
+    table->tables = realloc(table->tables, new_size);
+
+    // Reset split pointer
+    table->split = 0;
+  }
 }
 
-bool contains_key(struct hash_table *table, uint32_t key)
-{
-    uint32_t t_idx = tables_idx_from_table(table, key);
-    uint32_t s_idx = sub_idx(key, table->subtable_mask);
-    subtable subtab = table->tables[t_idx];
-    return contains_element(&subtab[s_idx], key);
-}
+static void split(struct hash_table *table) {
+  struct index from_idx = split_key(table->split);
+  struct index to_idx = split_key(table->split + table->m);
 
-static void shrink_tables(struct hash_table *table)
-{
-    uint32_t total_no_tables = 1 << (table->k + 1);
-    uint32_t new_no_tables = 2 * total_no_tables;
-    uint32_t size = 1 << table->table_bits;
+  if (to_idx.bin == 0 && merge_key(to_idx) == table->max_init + 1) {
+    table->tables[to_idx.table] =
+        malloc(SIZE(SUBTABLE_BITS) * sizeof *table->tables[to_idx.table]);
+  }
 
-    subtable *old_tables = table->tables;
-    subtable *new_tables = malloc(new_no_tables * sizeof(subtable));
-    for (uint32_t i = 0; i < new_no_tables; ++i) {
-        new_tables[i] = old_tables[i];
-    }
+  LIST from_bin = get_index_bin(table, from_idx);
+  LIST to_bin = get_index_bin(table, to_idx);
 
-    for (uint32_t i = new_no_tables; i < 2*new_no_tables; ++i) {
-        subtable subtab = table->tables[i];
-        free(subtab);
-    }
-    free(old_tables);
-    table->tables = new_tables;
-    table->allocated_tables = new_no_tables;
+  // Catch the front link of the from_bin list and reset the two lists to make
+  // them ready for the split.
+  struct link *link = *from_bin;
+  init_linked_list(from_bin);
+  init_linked_list(to_bin);
 
-    // When we shrink, all lists in the old tables
-    // must have been initialised
-    table->max_bin_initialised = size * new_no_tables;
-}
-
-static inline void merge_bin(struct hash_table *table)
-{
-    bool moved_table = false;
-    if (table->split_count > 0) {
-        table->split_count--; // FIXME: decease anyway...
+  // Now split the from_bin into two based on the left-most bit in the full key
+  // width
+  unsigned int split_bit = 1 << (table->table_bits + SUBTABLE_BITS);
+  while (link) {
+    struct link *next = link->next;
+    if (link->key & split_bit) {
+      // Move link
+      link->next = *to_bin;
+      *to_bin = link;
     } else {
-        table->k--;
-        set_table_masks(table);
-        table->split_count = table->old_tables_mask;
-        moved_table = true;
+      // Put link back in its current bin
+      link->next = *from_bin;
+      *from_bin = link;
     }
+    link = next;
+  }
 
-    // we use the number of tables the k indicate
-    // to compare with the totally allocated tables.
-    uint32_t total_no_tables = 1 << (table->k + 1);
-
-    uint32_t old_t_idx = tables_idx(
-        table->split_count,
-        table->old_tables_mask,
-        table->table_bits
-    );
-
-    uint32_t new_t_idx = (1 << table->k) + old_t_idx;
-    uint32_t s_idx = sub_idx(table->split_count, table->subtable_mask);
-
-    struct linked_list *old_bin =
-        &table->tables[old_t_idx][s_idx];
-    struct linked_list *new_bin =
-        &table->tables[new_t_idx][s_idx];
-
-    struct linked_list *list = new_bin->next;
-    while (list) {
-        struct linked_list *next = list->next;
-        list->next = old_bin->next;
-        old_bin->next = list;
-        list = next;
-    }
-    new_bin->next = 0;
-
-    if (total_no_tables <= 2) {
-        // Do not merge below the smallest table
-        return;
-    }
-    if (moved_table && total_no_tables <= table->allocated_tables / 4) {
-        // I'm moving one index after I should, but this
-        // point is slightly easier to recognize than the
-        // one before.
-        shrink_tables(table);
-    }
+  // Update counters to reflect that we have split
+  table->split++;
+  table->max_init = MAX(merge_key(to_idx), table->max_init);
 }
 
-void delete_key(struct hash_table *table, uint32_t key)
-{
-    uint32_t t_idx = tables_idx_from_table(table, key);
-    uint32_t s_idx = sub_idx(key, table->subtable_mask);
+static void grow(struct hash_table *table) {
+  grow_tables(table);
+  split(table);
+}
 
-    subtable subtab = table->tables[t_idx];
-    if (contains_element(&subtab[s_idx], key)) {
-        delete_element(&subtab[s_idx], key);
-        merge_bin(table);
+static void shrink(struct hash_table *table) {
+#warning Not implemented yet
+}
+
+void insert_key(struct hash_table *table, unsigned int key) {
+  grow(table);
+  LIST bin = get_key_bin(table, key);
+  if (!contains_element(bin, key)) {
+    add_element(bin, key);
+  }
+}
+
+bool contains_key(struct hash_table *table, unsigned int key) {
+  LIST bin = get_key_bin(table, key);
+  return contains_element(bin, key);
+}
+
+void delete_key(struct hash_table *table, unsigned int key) {
+  LIST bin = get_key_bin(table, key);
+  if (contains_element(bin, key)) {
+    delete_element(bin, key);
+    shrink(table);
+  }
+}
+
+void print_table(struct hash_table *table) {
+  for (unsigned int slot = 0; slot <= table->max_init; slot++) {
+    if ((slot & MASK(SUBTABLE_BITS)) == 0) printf("\n");
+    LIST bin = get_key_bin(table, slot);
+    char *sep = "";
+    if (slot == table->split) printf("->");
+    printf("[");
+    struct link *x;
+    for (x = *bin; x; x = x->next) {
+      printf("%s%u", sep, x->key);
+      sep = "|";
     }
+    printf("]");
+  }
+  printf("\n");
 }

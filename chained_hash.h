@@ -3,19 +3,21 @@
 #define CHAINED_HASH_H
 
 #include <stdbool.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
+
+#include "linked_lists.h"
 
 struct hash_table {
-    struct linked_list **table;
-    size_t size;
-    size_t used;
+  LIST_HEAD *bins;
+  unsigned int size;
+  unsigned int used;
 };
 
-struct hash_table *empty_table(size_t size);
+struct hash_table *new_table(unsigned int size);
 void delete_table(struct hash_table *table);
-void insert_key  (struct hash_table *table, uint32_t key);
-bool contains_key(struct hash_table *table, uint32_t key);
-void delete_key  (struct hash_table *table, uint32_t key);
+void insert_key(struct hash_table *table, unsigned int key);
+bool contains_key(struct hash_table *table, unsigned int key);
+void delete_key(struct hash_table *table, unsigned int key);
 
 #endif

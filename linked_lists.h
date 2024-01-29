@@ -6,7 +6,7 @@
 #include <stdlib.h>
 
 struct link {
-  uint32_t key;
+  unsigned int key;
   struct link *next;
 };
 typedef struct link *LIST_HEAD;

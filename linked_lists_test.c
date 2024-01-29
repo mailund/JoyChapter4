@@ -10,7 +10,8 @@ int main() {
       1, 2, 3, 4, 5,
   };
   size_t n = sizeof(some_keys) / sizeof(*some_keys);
-    LIST list;
+    LIST_HEAD head;
+    LIST list = &head;
     init_linked_list(list);
 
   for (unsigned int i = 0; i < n; i++) {

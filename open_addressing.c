@@ -4,20 +4,20 @@
 #include <string.h>
 #include <stdio.h>
 
-uint32_t
-static p(uint32_t k, uint32_t i, uint32_t m)
+unsigned int
+static p(unsigned int k, unsigned int i, unsigned int m)
 {
     return (k + i) & (m - 1);
 }
 
-static void resize(struct hash_table *table, uint32_t new_size)
+static void resize(struct hash_table *table, unsigned int new_size)
 {
     // remember the old bins until we have moved them.
     struct bin *old_bins = table->table;
-    uint32_t old_size = table->size;
+    unsigned int old_size = table->size;
 
     // Update table so it now contains the new bins (that are empty)
-    table->table = (struct bin *)malloc(new_size * sizeof(struct bin));
+    table->table = malloc(new_size * sizeof *table->table);
     struct bin *end = table->table + new_size;
     for (struct bin *bin = table->table; bin != end; ++bin) {
         bin->is_free = true;
@@ -38,13 +38,12 @@ static void resize(struct hash_table *table, uint32_t new_size)
     free(old_bins);
 }
 
-struct hash_table *empty_table(size_t size, double load_limit)
+struct hash_table *empty_table(unsigned int size, double load_limit)
 {
-    struct hash_table *table =
-        (struct hash_table*)malloc(sizeof(struct hash_table));
-    table->table = (struct bin *)malloc(size * sizeof(struct bin));
+    struct hash_table *table = malloc(sizeof *table);
+    table->table = malloc(size * sizeof *table->table);
     struct bin *end = table->table + size;
-    for (struct bin *bin = table->table; bin != end; ++bin) {
+    for (struct bin *bin = table->table; bin != end; bin++) {
         bin->is_free = true;
         bin->is_deleted = false;
     }
@@ -60,12 +59,12 @@ void delete_table(struct hash_table *table)
     free(table);
 }
 
-void insert_key(struct hash_table *table, uint32_t key)
+void insert_key(struct hash_table *table, unsigned int key)
 {
     if (contains_key(table, key)) return;
 
-    uint32_t index;
-    for (uint32_t i = 0; i < table->size; ++i) {
+    unsigned int index;
+    for (unsigned int i = 0; i < table->size; ++i) {
         index = p(key, i, table->size);
         struct bin *bin = & table->table[index];
 
@@ -95,10 +94,10 @@ void insert_key(struct hash_table *table, uint32_t key)
         resize(table, table->size * 2);
 }
 
-bool contains_key(struct hash_table *table, uint32_t key)
+bool contains_key(struct hash_table *table, unsigned int key)
 {
-    for (uint32_t i = 0; i < table->size; ++i) {
-        uint32_t index = p(key, i, table->size);
+    for (unsigned int i = 0; i < table->size; ++i) {
+        unsigned int index = p(key, i, table->size);
         struct bin *bin = & table->table[index];
         if (bin->is_free)
             return false;
@@ -108,10 +107,10 @@ bool contains_key(struct hash_table *table, uint32_t key)
     return false;
 }
 
-void delete_key(struct hash_table *table, uint32_t key)
+void delete_key(struct hash_table *table, unsigned int key)
 {
-    for (uint32_t i = 0; i < table->size; ++i) {
-        uint32_t index = p(key, i, table->size);
+    for (unsigned int i = 0; i < table->size; ++i) {
+        unsigned int index = p(key, i, table->size);
         struct bin * bin = & table->table[index];
         if (bin->is_free)
             return;

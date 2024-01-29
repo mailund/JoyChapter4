@@ -66,5 +66,5 @@ checks.json
 cmake_install.cmake
 Makefile
 CMakeScripts/
-JoyChapter3.xcodeproj/
 build/
+xcodebuild/

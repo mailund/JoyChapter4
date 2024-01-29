@@ -39,14 +39,12 @@ static void resize(struct hash_table *table, unsigned int new_size) {
   unsigned int old_size = table->size;
   LIST_HEAD *old_bins = table->bins;
 
-  // set up the new table
+    // set up the new table
   table->bins = malloc(new_size * sizeof *table->bins);
-  for (unsigned int i = 0; i < new_size; ++i) {
-    init_linked_list(get_key_bin(table, i));
-  }
+    for (LIST bin = table->bins; bin < table->bins + new_size; bin++) {
+      init_linked_list(bin);
+    }
   table->size = new_size;
-  // table->used remains the same since we don't use insert_key
-  // to add elements, we simply move the links.
 
   // copy keys
   for (LIST old_bin = old_bins; old_bin < old_bins + old_size; old_bin++) {

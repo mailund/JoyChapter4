@@ -2,6 +2,7 @@ Makefile.bak
 chained_hash_test
 linked_lists_test
 open_addressing_test
+open_addressing_prime_test
 
 # Prerequisites
 *.d

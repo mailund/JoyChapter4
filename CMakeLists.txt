@@ -6,18 +6,18 @@ project(
 
 include(CTest)
 
-add_library(array array.c)
+add_library(stack stack.c)
 add_library(linked_lists linked_lists.c)
 add_library(chained_hash chained_hash.c linked_lists.c)
 add_library(open_addressing open_addressing.c)
 add_library(open_addressing_prime open_addressing_prime.c)
 add_library(dynamic_chained_hash dynamic_chained_hash.c linked_lists.c)
 
-add_executable(array_test array_test.c)
-target_link_libraries(array_test array)
+add_executable(stack_test stack_test.c)
+target_link_libraries(stack_test stack)
 add_test(
-    NAME array_test 
-    COMMAND array_test
+    NAME stack_test 
+    COMMAND stack_test
 )
 
 add_executable(linked_lists_test linked_lists_test.c)

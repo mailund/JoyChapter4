@@ -6,12 +6,16 @@
 #include <stdlib.h>
 #include <time.h>
 
-static unsigned int random_key() {
-  unsigned int key = (unsigned int)random();
+static unsigned int
+random_key()
+{
+  unsigned int key = (unsigned int)rand();
   return key;
 }
 
-int main(int argc, const char *argv[]) {
+int
+main(int argc, const char *argv[])
+{
   if (argc != 2) {
     printf("Usage: %s no_elements\n", argv[0]);
     return EXIT_FAILURE;
@@ -44,7 +48,7 @@ int main(int argc, const char *argv[]) {
   printf("%g\n", elapsed_time);
 
   free(keys);
-  delete_table(table);
+  free_table(table);
 
   return EXIT_SUCCESS;
 }

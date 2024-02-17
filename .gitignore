@@ -1,4 +1,8 @@
-Makefile.bak
+.cache
+makebuild
+xcodebuild
+array_test
+dynamic_chained_test
 chained_hash_test
 linked_lists_test
 open_addressing_test
@@ -69,3 +73,4 @@ Makefile
 CMakeScripts/
 build/
 xcodebuild/
+makebuild/array_test

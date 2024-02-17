@@ -3,16 +3,14 @@
 
 #include <assert.h>
 #include <stdio.h>
-#include <stdlib.h>
 
-int main() {
+static void
+test_list(LIST list)
+{
   unsigned int some_keys[] = {
       1, 2, 3, 4, 5,
   };
   size_t n = sizeof(some_keys) / sizeof(*some_keys);
-    LIST_HEAD head;
-    LIST list = &head;
-    init_linked_list(list);
 
   for (unsigned int i = 0; i < n; i++) {
     printf("inserting key %u\n", some_keys[i]);
@@ -42,8 +40,18 @@ int main() {
       assert(contains_element(list, some_keys[i]));
   }
   printf("\n");
+}
 
-  delete_linked_list(list);
+int
+main()
+{
+  LIST static_list = EMPTY_LIST;
+  test_list(static_list);
+  free_list(static_list);
 
-  return EXIT_SUCCESS;
+  LIST owned_list = new_owned_list();
+  test_list(owned_list);
+  free_owned_list(owned_list);
+
+  return 0;
 }

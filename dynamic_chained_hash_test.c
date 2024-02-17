@@ -6,9 +6,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "linked_lists.h"
-
-int main(int argc, const char *argv[]) {
+int
+main(int argc, const char *argv[])
+{
   if (argc != 2) {
     printf("Usage: %s no_elements\n", argv[0]);
     return EXIT_FAILURE;
@@ -16,7 +16,7 @@ int main(int argc, const char *argv[]) {
 
   int no_elms = atoi(argv[1]);
 
-  srand((unsigned int)time(0));
+  srandom((unsigned int)time(NULL));
   unsigned int *keys = malloc(no_elms * sizeof *keys);
   for (int i = 0; i < no_elms; ++i) {
     keys[i] = rand();
@@ -42,11 +42,11 @@ int main(int argc, const char *argv[]) {
     printf("inserting %u\n", keys[i]);
     insert_key(table, keys[i]);
     print_table(table);
-      
-      for (int j = 0; j < i; j++) {
-          assert(contains_key(table, j));
-          assert(contains_key(table, keys[j]));
-      }
+
+    for (int j = 0; j < i; j++) {
+      assert(contains_key(table, j));
+      assert(contains_key(table, keys[j]));
+    }
   }
   printf("Done inserting\n");
   print_table(table);
@@ -64,7 +64,7 @@ int main(int argc, const char *argv[]) {
   printf("----deleting---\n");
   for (int i = 0; i < no_elms; ++i) {
     printf("Checking that we have key %u\n", keys[i]);
-      print_table(table);
+    print_table(table);
     assert(contains_key(table, keys[i]));
     delete_key(table, keys[i]);
     assert(!contains_key(table, keys[i]));

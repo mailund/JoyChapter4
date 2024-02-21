@@ -11,7 +11,7 @@ struct stack {
 };
 
 struct stack *
-new_stack(int initial_size);
+new_stack(void);
 void
 free_stack(struct stack *stack);
 

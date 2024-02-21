@@ -5,12 +5,12 @@
 #include <stdlib.h>
 
 struct stack *
-new_stack(int initial_size)
+new_stack()
 {
   struct stack *stack = malloc(sizeof *stack);
-  *stack = (struct stack){.size = initial_size,
+  *stack = (struct stack){.size = 1,
                           .used = 0,
-                          .array = malloc(initial_size * sizeof *stack->array)};
+                          .array = malloc(sizeof *stack->array)};
   return stack;
 }
 
@@ -26,6 +26,7 @@ resize(struct stack *stack, unsigned int new_size)
 {
   assert(new_size >= stack->used);
   stack->array = realloc(stack->array, new_size * sizeof *stack->array);
+  stack->size = new_size;
 }
 
 void

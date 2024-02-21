@@ -13,7 +13,7 @@ struct hash_table {
 };
 
 struct hash_table *
-new_table(unsigned int size);
+new_table();
 void
 free_table(struct hash_table *table);
 

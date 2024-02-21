@@ -26,7 +26,7 @@ main(int argc, const char *argv[])
   for (int i = 0; i < no_elms; ++i) {
     keys[i] = random_key();
   }
-  struct hash_table *table = new_table(2);
+  struct hash_table *table = new_table();
   clock_t start = clock();
   for (int i = 0; i < no_elms; ++i) {
     insert_key(table, keys[i]);

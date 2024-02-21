@@ -6,7 +6,7 @@
 int
 main()
 {
-  struct stack *stack = new_stack(1);
+  struct stack *stack = new_stack();
 
   for (int i = 0; i < 10; ++i) {
     push(stack, i);

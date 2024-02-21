@@ -5,12 +5,14 @@
 
 #include "open_addressing.h"
 
+#define UPPER_LOAD_LIMIT 0.5
+#define LOWER_LOAD_LIMIT 0.251
+
 // Primes for 1.66 growth
-int primes[] = {2,       5,       11,      19,      37,      67,
-                113,     191,     331,     557,     929,     1543,
-                2579,    4283,    7121,    11821,   19661,   32647,
-                54217,   90001,   149411,  248033,  411737,  683489,
-                1134607, 1883459, 3126547, 5190071, 8615527, 14301779};
+int primes[] = {11,     19,      37,      67,      113,     191,     331,
+                557,    929,     1543,    2579,    4283,    7121,    11821,
+                19661,  32647,   54217,   90001,   149411,  248033,  411737,
+                683489, 1134607, 1883459, 3126547, 5190071, 8615527, 14301779};
 
 static size_t no_primes = (sizeof primes) / sizeof(*primes);
 
@@ -21,54 +23,54 @@ p(unsigned int k, unsigned int i, unsigned int m)
 }
 
 static void
-resize(struct hash_table *table, unsigned int new_size)
+init_table(struct hash_table *table, unsigned int prime_idx, struct bin *begin,
+           struct bin *end)
 {
-  // remember the old bins until we have moved them.
-  struct bin *old_bins = table->bins;
-  unsigned int old_size = table->size;
+  unsigned int size = primes[prime_idx];
 
-  // Update table so it now contains the new bins (that are empty)
-  table->bins = malloc(new_size * sizeof *table->bins);
-  struct bin *end = table->bins + new_size;
+  // Initialize table members
+  struct bin *bins = malloc(size * sizeof *bins);
+  *table = (struct hash_table){.bins = bins,
+                               .size = size,
+                               .used = 0,
+                               .active = 0,
+                               .primes_idx = prime_idx};
+
+  // Initialize bins
   struct bin empty_bin = {.in_probe = false, .is_empty = true};
-  for (unsigned int i = 0; i < new_size; i++) {
+  for (unsigned int i = 0; i < table->size; i++) {
     table->bins[i] = empty_bin;
   }
-  table->size = new_size;
-  table->active = table->used = 0;
 
-  // the move the values from the old bins to the new, using the table's
-  // insertion function
-  end = old_bins + old_size;
-  for (struct bin *bin = old_bins; bin != end; ++bin) {
-    if (bin->in_probe || !bin->is_empty) {
+  // Copy the old bins to the new table
+  for (struct bin *bin = begin; bin != end; bin++) {
+    if (!bin->is_empty) {
       insert_key(table, bin->key);
     }
   }
-
-  // finally, free memory for old bins
-  free(old_bins);
 }
 
 struct hash_table *
-new_table(unsigned int size, double load_limit)
+new_table()
 {
-  size = primes[0];
   struct hash_table *table = malloc(sizeof *table);
-  table->size = size;
-  table->bins = malloc(size * sizeof *table->bins);
-
-  struct bin empty_bin = {.in_probe = false, .is_empty = true};
-  for (unsigned int i = 0; i < size; i++) {
-    table->bins[i] = empty_bin;
-  }
-
-  table->size = size;
-  table->active = table->used = 0;
-  table->load_limit = load_limit;
+  init_table(table, 0, NULL, NULL);
   return table;
 }
 
+static void
+resize(struct hash_table *table, unsigned int new_primes_idx)
+{
+  // remember the old bins until we have moved them.
+  struct bin *old_bins_begin = table->bins,
+             *old_bins_end = old_bins_begin + table->size;
+
+  // Update table and copy the old active bins to it.
+  init_table(table, new_primes_idx, old_bins_begin, old_bins_end);
+
+  // finally, free memory for old bins
+  free(old_bins_begin);
+}
 void
 delete_table(struct hash_table *table)
 {
@@ -85,39 +87,39 @@ find_key(struct hash_table *table, unsigned int key)
     if (bin->key == key || !bin->in_probe)
       return bin;
   }
-  // The table is full. We cannot handle that yet!
+  // The table is full. This should not happen!
   assert(false);
 }
 
-// Find the bin containing key or the first empty bin in its probe.
+// Find the first empty bin in its probe.
 struct bin *
-find_key_or_empty(struct hash_table *table, unsigned int key)
+find_empty(struct hash_table *table, unsigned int key)
 {
   for (unsigned int i = 0; i < table->size; i++) {
     struct bin *bin = table->bins + p(key, i, table->size);
-    if (bin->key == key || bin->is_empty || !bin->in_probe)
+    if (bin->is_empty)
       return bin;
   }
-  // The table is full. We cannot handle that yet!
+  // The table is full. This should not happen!
   assert(false);
 }
 
 void
 insert_key(struct hash_table *table, unsigned int key)
 {
-  struct bin *bin = find_key_or_empty(table, key);
-  if (bin->key == key)
-    return; // Nothing further to do
-  if (!bin->in_probe) {
-    // We now will use one more bin
-    table->used++;
-  }
-  table->active++; // We definitely have one more active
-  *bin = (struct bin){.in_probe = true, .is_empty = false, .key = key};
+  if (!contains_key(table, key)) {
+    struct bin *key_bin = find_empty(table, key);
 
-  if (table->used > table->load_limit * table->size) {
-    assert(table->primes_idx + 1 < no_primes);
-    resize(table, primes[++(table->primes_idx)]);
+    table->active++;
+    if (!key_bin->in_probe)
+      table->used++; // We are using a new bin
+
+    *key_bin = (struct bin){.in_probe = true, .is_empty = false, .key = key};
+
+    if (table->used > table->size / 2) {
+      assert(table->primes_idx + 1 < no_primes);
+      resize(table, table->primes_idx + 1);
+    }
   }
 }
 
@@ -131,18 +133,15 @@ contains_key(struct hash_table *table, unsigned int key)
 void
 delete_key(struct hash_table *table, unsigned int key)
 {
-  // This will do nothing if we are at the end of the probe but delete if we are
-  // inside a probe
   struct bin *bin = find_key(table, key);
   if (bin->key != key)
-    return;             // Nothing more to do
-  bin->is_empty = true; // Delete the bin
-  if (table->active < table->load_limit / 4 * table->size)
-    resize(table, table->size / 2);
+    return; // Nothing more to do
 
-  if (table->active < table->load_limit / 4 * table->size &&
-      table->primes_idx > 0) {
-    resize(table, primes[--(table->primes_idx)]);
+  bin->is_empty = true; // Delete the bin
+  table->active--;      // Same bins in use but one less active
+
+  if (table->active < table->size / 8 && table->primes_idx > 0) {
+    resize(table, table->primes_idx - 1);
   }
 }
 

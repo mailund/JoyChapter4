@@ -35,14 +35,6 @@ init_table(struct hash_table *table, unsigned int size, struct bin *begin,
   }
 }
 
-struct hash_table *
-new_table()
-{
-  struct hash_table *table = malloc(sizeof *table);
-  init_table(table, MIN_SIZE, NULL, NULL);
-  return table;
-}
-
 static void
 resize(struct hash_table *table, unsigned int new_size)
 {
@@ -55,6 +47,14 @@ resize(struct hash_table *table, unsigned int new_size)
 
   // finally, free memory for old bins
   free(old_bins_begin);
+}
+
+struct hash_table *
+new_table()
+{
+  struct hash_table *table = malloc(sizeof *table);
+  init_table(table, MIN_SIZE, NULL, NULL);
+  return table;
 }
 
 void

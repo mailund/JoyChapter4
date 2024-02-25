@@ -4,10 +4,11 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "linked_lists.h"
 
-static const unsigned int SUBTABLE_BITS = 3; // 8 bins to a sub-table
+static const unsigned int SUBTABLE_BITS = 2; // 8 bins to a sub-table
 
 // A sub-table is an array of pointers to links.
 // A sub-table plus an index is also a struct link **
@@ -15,10 +16,10 @@ static const unsigned int SUBTABLE_BITS = 3; // 8 bins to a sub-table
 typedef struct link **subtable;
 struct hash_table {
   subtable *tables;        // Tables is an array of sub-tables
-  unsigned int m;          // Number of bins in the buttom half of the table
   unsigned int max_init;   // Max index of initialised bins.
   unsigned int table_bits; // Bits used for indexing into sub-tables
   unsigned int split;      // Pointer to the bin we need to split/merge
+  // m, the number of guaranteed initialised bins, is 2^{table_bits + SUBTABLE_BITS}
 };
 
 // Size of a word with `bits` bits
@@ -34,6 +35,12 @@ bit_mask(unsigned int bits)
   return bits_size(bits) - 1;
 }
 
+static inline unsigned int
+m(struct hash_table *table)
+{
+  return bits_size(table->table_bits + SUBTABLE_BITS);
+}
+
 // A mask that matches the current bit we are splitting on
 static inline unsigned int
 split_bit_mask(struct hash_table *table)
@@ -44,7 +51,7 @@ split_bit_mask(struct hash_table *table)
 static inline unsigned int
 max_index(struct hash_table *table)
 {
-  return table->m + table->split;
+  return m(table) + table->split;
 }
 // A mask for the parts of hash keys we are currently considering
 static inline unsigned int
@@ -108,11 +115,9 @@ new_table()
     table->tables[0][i] = NULL;
   }
 
-  table->m =
-      bits_size(SUBTABLE_BITS);   // We have one full sub-table to begin with
-  table->max_init = table->m - 1; // Max index of initialised bins
   table->table_bits = 0;          // we only use bin bits initially
   table->split = 0;               // we start splitting at the first bin
+  table->max_init = m(table) - 1; // Max index of initialised bins
 
   return table;
 }
@@ -120,10 +125,13 @@ new_table()
 void
 delete_table(struct hash_table *table)
 {
+
   // Delete lists in all initialised bins
-  for (unsigned int bin = 0; bin < table->max_init; bin++) {
+  for (unsigned int bin = 0; bin < max_index(table); bin++) {
     free_list(get_bin(table, key_index(bin)));
   }
+
+  return; // FIXME this isn't working right now
 
   // Then free all sub-tables
   unsigned int tables_allocated = table->max_init >> SUBTABLE_BITS;
@@ -140,10 +148,9 @@ static void
 grow_tables(struct hash_table *table)
 {
   // Grow table if we have inserted m elements.
-  if (table->split == table->m) {
+  if (table->split == m(table)) {
     // Use one more bit for table indices
     table->table_bits++;
-    table->m *= 2;
 
     // Alloc more table pointers (but don't initialise, we do that
     // incrementally)
@@ -181,7 +188,7 @@ split(struct hash_table *table)
 {
   // Initialise the target bin at split + m.
   struct index to_idx = key_index(max_index(table));
-  if (to_idx.bin == 0 && table->split + table->m == table->max_init + 1) {
+  if (to_idx.bin == 0 && table->split + m(table) == table->max_init + 1) {
     // If we are moving into a new sub-table, we need to allocate it
     table->tables[to_idx.table] =
         malloc(bits_size(SUBTABLE_BITS) * sizeof *table->tables[to_idx.table]);
@@ -194,8 +201,8 @@ split(struct hash_table *table)
   split_bin(from_bin, to_bin, split_bit_mask(table));
 
   // Update counters to reflect that we have split
-  if (table->split + table->m > table->max_init)
-    table->max_init = table->split + table->m;
+  if (table->split + m(table) > table->max_init)
+    table->max_init = table->split + m(table);
   table->split++;
 }
 
@@ -238,9 +245,10 @@ merge_bins(LIST from_bin, LIST to_bin)
 static void
 shrink_tables(struct hash_table *table)
 {
+  return; // FIXME this isn't working right now
   // If we have reduced the size from 8m to 2m, reduce the table size to 4m.
-  if (table->max_init > 8 * table->m) {
-    unsigned int from_index = (4 * table->m) >> SUBTABLE_BITS;
+  if (table->max_init > 8 * m(table)) {
+    unsigned int from_index = (4 * m(table)) >> SUBTABLE_BITS;
     unsigned int tables_allocated = table->max_init >> SUBTABLE_BITS;
     // Free the sub-tables that are now lost.
     for (unsigned int i = from_index; i < tables_allocated; i++) {
@@ -250,7 +258,7 @@ shrink_tables(struct hash_table *table)
     size_t new_size = from_index * sizeof *table->tables;
     table->tables = realloc(table->tables, new_size);
     // And now the max initialised is 4m.
-    table->max_init = 4 * table->m;
+    table->max_init = 4 * m(table);
   }
 }
 
@@ -263,8 +271,7 @@ dec_split(struct hash_table *table)
     table->split--;
   } else {
     table->table_bits--;
-    table->m /= 2;
-    table->split = table->m - 1;
+    table->split = m(table) - 1;
   }
 }
 

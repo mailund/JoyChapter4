@@ -6,7 +6,7 @@
 
 #include "linked_lists.h"
 
-static const unsigned int SUBTABLE_BITS = 1; // 8 bins to a sub-table
+static const unsigned int SUBTABLE_BITS = 3; // 8 bins to a sub-table
 
 // A sub-table is an array of pointers to links.
 // A sub-table plus an index is also a struct link **

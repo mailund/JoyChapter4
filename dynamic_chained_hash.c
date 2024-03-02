@@ -27,13 +27,6 @@ bits_size(unsigned int bits)
 {
   return 1 << bits;
 }
-// Mask for the lower `bits` bits
-static inline unsigned int
-bit_mask(unsigned int bits)
-{
-  return bits_size(bits) - 1;
-}
-
 // The range [0, split + m) are initialised. The range [split + m, 2m)
 // is where we are adding new initialised bins through splitting.
 static inline unsigned int
@@ -42,24 +35,24 @@ m(struct hash_table *table)
   return bits_size(table->table_bits + SUBTABLE_BITS);
 }
 
-
-// A mask that matches the current bit we are splitting on
+// The largest bin that is currently in use
 static inline unsigned int
-split_bit_mask(struct hash_table *table)
+max_index(struct hash_table *table)
 {
-  return 1 << (table->table_bits + SUBTABLE_BITS);
+  return m(table) + table->split;
+}
+
+// Mask for the lower `bits` bits
+static inline unsigned int
+bit_mask(unsigned int bits)
+{
+  return bits_size(bits) - 1;
 }
 // A mask for the parts of hash keys we are currently considering
 static inline unsigned int
 key_mask(struct hash_table *table)
 {
   return bit_mask(table->table_bits + 1 + SUBTABLE_BITS);
-}
-// The largest bin that is currently in use
-static inline unsigned int
-max_index(struct hash_table *table)
-{
-  return m(table) + table->split;
 }
 
 // The bins up to split + m are valid, the higher indices are not.
@@ -191,7 +184,7 @@ split(struct hash_table *table)
   // Get the split bin and if there are elements there, split them.
   LIST from_bin = get_bin(table, table->split);
   LIST to_bin = get_bin(table, max_index(table));
-  split_bin(from_bin, to_bin, split_bit_mask(table));
+  split_bin(from_bin, to_bin, m(table));
 
   // Update counter to reflect that we have split
   table->split++;
@@ -229,10 +222,9 @@ merge_bins(LIST from_bin, LIST to_bin)
 static void
 shrink_tables(struct hash_table *table)
 {
-  // Checking when we point to the beginning of [0,2m). We check if the number
-  // of tables we use has halved.
+  // Checking when we point to the beginning of [0,2m).
   if (table->split == 0 &&
-      bits_size(table->table_bits) < table->allocated_subtables / 2) {
+      bits_size(table->table_bits) < table->allocated_subtables / 4) {
     unsigned int new_no_tables = bits_size(table->table_bits + 1);
     for (unsigned int i = new_no_tables; i < table->allocated_subtables; i++) {
       free(table->tables[i]);
@@ -243,29 +235,17 @@ shrink_tables(struct hash_table *table)
   }
 }
 
-// One past the largest bin that can be initialised
-static inline unsigned int
-two_m(struct hash_table *table)
-{
-  return m(table) << 1;
-}
-
 // Decrement split. If it is a zero, we need to
 // decrement table_bits and m instead, and set split to m - 1.
 static inline void
 dec_split(struct hash_table *table)
 {
-  // dec = 2m + s - 1.
-  // 2m + s = [00001ssss] where the 1 is 2m.
-  // s is at max m, so 2m + s = [000011000] or [000010sss].
-  // If s > 0, dec = [000010yyy] where yyy = s - 1.
-  // In that case, we can get the new s by dec & (m - 1). (m - 1 = 00000111)
-  // If s = 0, dec = 2m - 1 = [00010000] - 1 = [00001111].
-  // If we update table_bits, table_bits -> table_bits - 1 we get a new m := m/2
-  // and we also have s := dec & (m - 1).
-  unsigned int dec = (two_m(table) | table->split) - 1;
-  table->table_bits -= dec < two_m(table); // Decrement table_bits if dec < 2m
-  table->split = dec & (m(table) - 1);     // Extract split from dec by masking.
+  if (table->split > 0) {
+    table->split--;
+  } else {
+    table->table_bits--;
+    table->split = m(table) - 1;
+  }
 }
 
 static void
